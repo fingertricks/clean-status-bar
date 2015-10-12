@@ -16,6 +16,10 @@
     <string name="empty">Empty</string>
     <string name="network_icon_info">Signal icon only seen when WiFi is off</string>
     <string name="gps">GPS</string>
+    <string name="snack_bar_system_alert_window_rationale">On Android 6.0+ this app requires permission to
+        draw to the status bar</string>
+    <string name="snack_bar_system_alert_window_action">Settings</string>
+
 
     <!-- Notification -->
     <string name="clean_status_bar_is_running">Clean status bar is running</string>

@@ -1,7 +1,10 @@
 package com.emmaguy.cleanstatusbar;
 
+import android.annotation.TargetApi;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.preference.CheckBoxPreference;
@@ -9,9 +12,12 @@ import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceFragment;
+import android.provider.Settings;
+import android.support.design.widget.Snackbar;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CompoundButton;
 import android.widget.Switch;
@@ -19,6 +25,19 @@ import android.widget.Switch;
 import com.emmaguy.cleanstatusbar.prefs.TimePreference;
 
 public class MainActivity extends AppCompatActivity {
+    public static int OVERLAY_PERMISSION_REQ_CODE = 1000;
+
+    Switch masterSwitch;
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        if (!canDrawOverlays()){
+            masterSwitch.setChecked(false);
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -28,15 +47,25 @@ public class MainActivity extends AppCompatActivity {
         getFragmentManager().beginTransaction().replace(android.R.id.content, new SettingsFragment()).commit();
     }
 
+    @TargetApi(Build.VERSION_CODES.M)
+    private boolean canDrawOverlays() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(getApplicationContext());
+    }
+
     private void initSwitch() {
-        Switch masterSwitch = new Switch(this);
-        masterSwitch.setChecked(CleanStatusBarService.isRunning());
+        masterSwitch = new Switch(this);
+        masterSwitch.setChecked(CleanStatusBarService.isRunning() && canDrawOverlays());
         masterSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
                 Intent service = new Intent(MainActivity.this, CleanStatusBarService.class);
                 if (b) {
-                    startService(service);
+                    if(canDrawOverlays()) {
+                        startService(service);
+                    } else {
+                        compoundButton.setChecked(false);
+                        showPermissionSnackBar();
+                    }
                 } else {
                     stopService(service);
                 }
@@ -47,8 +76,42 @@ public class MainActivity extends AppCompatActivity {
         final ActionBar.LayoutParams lp = new ActionBar.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.gravity = Gravity.RIGHT | Gravity.CENTER_VERTICAL;
         lp.rightMargin = getResources().getDimensionPixelSize(R.dimen.master_switch_margin_right);
-        bar.setCustomView(masterSwitch, lp);
-        bar.setDisplayShowCustomEnabled(true);
+        if (bar != null ) {
+            bar.setCustomView(masterSwitch, lp);
+            bar.setDisplayShowCustomEnabled(true);
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.M)
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == OVERLAY_PERMISSION_REQ_CODE) {
+            boolean permissionEnabled = Settings.canDrawOverlays(this);
+
+            masterSwitch.setChecked(permissionEnabled);
+
+            if (!permissionEnabled) {
+                showPermissionSnackBar();
+            }
+        }
+    }
+
+    private void showPermissionSnackBar() {
+        Snackbar snackbar = Snackbar.make(findViewById(android.R.id.content), R.string.snack_bar_system_alert_window_rationale, Snackbar.LENGTH_INDEFINITE);
+        snackbar.setAction(R.string.snack_bar_system_alert_window_action, new View.OnClickListener() {
+            @TargetApi(Build.VERSION_CODES.M)
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                try {
+                    startActivityForResult(intent, OVERLAY_PERMISSION_REQ_CODE);
+                } catch (ActivityNotFoundException e) {
+                    // do nothing
+                }
+            }
+        });
+        snackbar.show();
     }
 
     public static class SettingsFragment extends PreferenceFragment implements SharedPreferences.OnSharedPreferenceChangeListener {
